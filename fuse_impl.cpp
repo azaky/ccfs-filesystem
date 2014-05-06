@@ -4,171 +4,49 @@
 #include <cerrno>
 
 // pake filesystem yg ada di main.cpp
-extern SimpleFS filesystem;
-
-/*  untuk menghilangkan / di depan path 
-	karena setiap parameter path pada fungsi fuse merupakan path absolute dari root directory
-	misal file abcd.txt pada root akan ditulis /abcd.txt
-*/
-string getPath(const char* path){
-	return string(path + 1);
-}
-
-/* mencari index slot suatu file. -1 jika tidak ada, throw error jika nama terlalu panjang */
-int searchFile (const char* fname){
-	string name = getPath(fname);
-	
-	// validasi panjang nama file
-	if (name.length() > 26){
-		throw -ENAMETOOLONG;
-	}
-	
-	// pencarian
-	for (int i = 0; i < SLOT_NUM; i++){
-		if (filesystem.files[i].name == name){
-			return i;
-		}
-	}
-	
-	return -1;
-}
-
-/* mengalokasikan slot kosong baru untuk digunakan */
-int nextFree(){
-	// ambil firstEmpty saat ini
-	int empty = filesystem.firstEmpty;
-	
-	// tentukan firstEmpty berikutnya
-	filesystem.firstEmpty = 255;
-	for (int i = empty + 1; i < SLOT_NUM; i++){
-		if (filesystem.files[i].isEmpty()){
-			filesystem.firstEmpty = i;
-			break;
-		}
-	}
-	
-	// kurangi jumlah slot yang available
-	filesystem.available--;
-	
-	// update header
-	filesystem.writeHeader();
-	
-	return empty;
-}
-
-/* mengosongkan kembali suatu slot */
-void returnFree(int index){
-	// kosongkan slot lalu update
-	filesystem.files[index].name = "";
-	filesystem.files[index].size = 0;
-	filesystem.writeFile(index);
-
-	// naikkan jumlah slot yang available
-	filesystem.available++;
-	
-	// update firstEmpty
-	if (filesystem.firstEmpty > index){
-		filesystem.firstEmpty = index;
-	}
-	
-	// update header
-	filesystem.writeHeader();
-}
+extern CCFS filesystem;
 
 /************ Implementasi FUSE ***************/
 
 /* get attribute */
-int simple_getattr(const char* path, struct stat* stbuf){
-
+int ccfs_getattr(const char* path, struct stat* stbuf){
 	/* jika root path */
 	if (string(path) == "/"){
 		stbuf->st_nlink = 1;
 		stbuf->st_mode = S_IFDIR | 0777; // file dengan permission rwxrwxrwx
 		stbuf->st_mtime = filesystem.mount_time;
 		return 0;
-	}else{
-		int index;
+	}
+	else {
+		Entry entry = Entry(0, 0).getEntry(path);
 		
-		// cari file
-		try{
-			index = searchFile(path);
-		}catch(int e){
-			return e;
+		//Kalau path tidak ditemukan
+		if (entry.getName() == "") {
+			return -ENOENT;
 		}
-	
-		// jika tidak ada, kembalikan error no such file/directory
-		if (index < 0) return -ENOENT;
-	
+		
 		// tulis stbuf, tempat memasukkan atribut file
 		stbuf->st_nlink = 1;
 		
-		// entri ini adalah file dengan permission rwxrwxrwx
-		stbuf->st_mode = S_IFREG | 0777;
+		// cek direktori atau bukan
+		if (entry.getAttr() & 0x8) {
+			stbuf->st_mode = S_IFDIR | (0770 + entry.getAttr() & 0x7);
+		}
+		else {
+			stbuf->st_mode = S_IFREG | (0770 + entry.getAttr() & 0x7);
+		}
 		
 		// ukuran file
-		stbuf->st_size = filesystem.files[index].size;
+		stbuf->st_size = entry.getSize();
 		
 		// waktu pembuatan file, asumsinya sama dengan waktu mounting
-		stbuf->st_mtime = filesystem.mount_time;
-	
+		stbuf->st_mtime = filesystem.mount_time; //ganti ya ntar
+		
 		return 0;
 	}
 }
 
-/* open file */
-int simple_open(const char* path, struct fuse_file_info* fi){
-	/* hanya mengecek apakah file ada atau tidak */
-
-	int index;
-	try{
-		index = searchFile(path);
-	}catch(int e){
-		return e;
-	}
-	
-	// error no such file/directory
-	if (index < 0) return -ENOENT;
-			
-	return 0;
-}
-
-/* mknod, untuk membuat file */
-int simple_mknod(const char *path, mode_t mode, dev_t dev){
-	
-	// kalo filesystem sudah penuh, error over quota
-	if (filesystem.available == 0){
-		return -EDQUOT;
-	}
-	
-	// cari file
-	int index;
-	try{
-		index = searchFile(path);
-	}catch(int e){
-		return e;
-	}
-	
-	// kalo sudah ada, return error file already exist
-	if (index >= 0){
-		return -EEXIST;
-	}
-	
-	// alokasi slot baru
-	index = nextFree();
-	
-	// edit nama slot
-	filesystem.files[index].name = getPath(path);
-	filesystem.files[index].size = 0;
-	
-	
-	// update data slot
-	filesystem.writeFile(index);
-	
-	return 0;
-}
-
-/* membaca direktori */
-int simple_readdir(const char* path, void* buf, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info* fi){
+int ccfs_readdir(const char* path, void* buf, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info* fi){
 	// selain root directory, error
 	if (string(path) != "/"){
 		return -ENOENT;
@@ -181,158 +59,78 @@ int simple_readdir(const char* path, void* buf, fuse_fill_dir_t filler, off_t of
 	filler(buf, ".", NULL, 0);
 	filler(buf, "..", NULL, 0);
 	
-	for(int i = 0; i < SLOT_NUM; ++i){
-		// untuk setiap slot yang tidak kosong, tulis ke buf
-		if (!filesystem.files[i].isEmpty()){
-			filler(buf, filesystem.files[i].name.c_str(), NULL, 0);
-		}
+	Entry entry(0, 0);
+	while (!entry.isEmpty()) {
+		filler(buf, entry.getName().c_str(), NULL, 0);
+		entry = entry.nextEntry();
 	}
 	
 	return 0;
 }
 
-/* untuk mengubah panjang suatu file, biasa digunakan saat penulisan pertama */
-int simple_truncate(const char* path, off_t size){
-	// cari file
-	int index;
-	try{
-		index = searchFile(path);
-	}catch(int e){
-		return e;
-	}
-	
-	if (index < 0){
-		return -ENOENT;
-	}
-	
-	// jika ukuran lebih dari 100 byte, error file too big
-	if (size > 100){
-		return -EFBIG;
-	}
-	
-	// update ukuran slot
-	filesystem.files[index].size = size;
-	filesystem.writeFile(index);
-	
-	return 0;
-}
-
-/* membaca file */
-int simple_read(const char* path, char *buf, size_t size, off_t offset, struct fuse_file_info* fi){
-	// cari file
-	int index;
-	try{
-		index = searchFile(path);
-	}catch(int e){
-		return e;
-	}
-	
-	if (index < 0){
-		return -ENOENT;
-	}
-	
-	int fsize = filesystem.files[index].size;
-	
-	if (offset >= fsize){
-		// jika titik awal pembacaan melebihi ukuran file
-		// maka tidak ada data yg dibaca
+int ccfs_mkdir(const char *path, mode_t mode)
+{
+	/* mencari parent directory */
+	int i;
+	for(i = strlen(path)-1;path[i]!='/';i--){
 		
-		size = 0;
-	}else{
-		// sesuaikan panjang pembacaan jika melebihi ukuran file
-		if (offset + size > fsize){
-			size = fsize - offset;
-		}
-		
-		// masukkan data ke buf
-		filesystem.files[index].getContent(buf, size, offset);
-	} 
+	}
 	
-	// kembalikan jumlah byte yang berhasil dibaca
-	return size;
-}
+	string parentPath = string(path, i);
+	
+    Entry entry = Entry(0,0).getEntry(parentPath);
+    
+    ptr_block index = entry.getIndex();
+    entry = Entry(index, 0);
+    
+    /* mencari entry kosong di parent */
+    while (!entry.isEmpty()) {
+		entry = entry.nextEntry();
+	}
+	
+	/* menuliskan data di entry tersebut */
+	entry.setName(path + i);
+	entry.setAttr(0x0F);
+	entry.setTime(0x00);
+	entry.setDate(0x00);
+	entry.setIndex(filesystem.firstEmpty);
+	while (filesystem.nextBlock[filesystem.firstEmpty] != 0x0000) {
+		filesystem.firstEmpty++;
+	}
+	filesystem.nextBlock[filesystem.firstEmpty] = 0xFFFF;
+    entry.setSize(0x00);
+    
+    entry.write();
+    
+    return 0;
 
-/* menulis file */
-int simple_write(const char* path, const char *buf, size_t size, off_t offset, struct fuse_file_info* fi){
-	// cari file
-	int index;
-	try{
-		index = searchFile(path);
-	}catch(int e){
-		return e;
-	}
-	
-	if (index < 0){
-		return -ENOENT;
-	}
-	
-	
-	int fsize = filesystem.files[index].size;
-	
-	// jika penulisan akan menyebabkan ukuran file melebihi 100 byte, error file too big
-	if (offset + size > 100){
-		return -EFBIG;		
-	}
-	
-	// tulis isi file
-	filesystem.files[index].setContent(buf, size, offset);
-	
-	// jika penulisan akan menyebabkan ukuran bertambah, update ukuran file
-	if (offset + size > fsize){
-		fsize = offset + size - fsize;
-		filesystem.files[index].size = fsize;
-	}
-	
-	// update data slot
-	filesystem.writeFile(index);
-	
-	return size;
-}
+/*    
+    int retstat = 0;
+    char fpath[PATH_MAX];
 
-/* rename/cut file */
-int simple_rename(const char* from, const char* to){
-	// cari from dan to
-	int idx_from, idx_to;
-	try{
-		idx_from = searchFile(from);
-		idx_to = searchFile(to);
-	}catch(int e){
-		return e;
-	}
-	
-	// jika from tidak ada, error
-	if (idx_from < 0){
-		return -ENOENT;
-	}
-	
-	// ganti nama from jadi to
-	filesystem.files[idx_from].name = getPath(to);
-	filesystem.writeFile(idx_from);
-	
-	// jika to sudah ada, hapus to
-	if (idx_to >= 0){
-		returnFree(idx_to);		
-	}
+    AKMFS_fullpath(fpath, path);
+    fprintf(stderr, "Path = %s\n", path);
+    debug("Folder sedang dibuat, tekan enter untuk melanjutkan");
+	// Get first free
+  addresstype v_addr = (addresstype) (getFSFirstFreeAddress() & 0xffff);
+  
+  // File ini akan ditaruh di direktori mana dengan cara ambil alamat pertama 
+  // block entry yang kosong
+  unsigned int address = getAddFreeEntryFromPath(path);
+  if (address==0) return -errno;
 
-	return 0;
-}
-
-/* hapus file */
-int simple_unlink(const char* path){
-	// cari file
-	int index;
-	try{
-		index = searchFile(path);
-	}catch(int e){
-		return e;
-	}
-	
-	if (index < 0){
-		return -ENOENT;
-	}
-	
-	// hapus file
-	returnFree(index);
-		
-	return 0;
+  // Taruh entry data
+  attrtype attr = getAttributeType(0, 0, 0, 1);
+  addEntryPathToAddress(path, address, attr, v_addr);
+  
+  // Ganti first free di VI ke free yang baru <-- ini gimana...
+  changeFSFirstAddress(getNEWFSFirstAddress(v_addr));
+  
+  // Kurangi free capacity di VI
+  changeFSFreeCapacity(getFSFreeCapacity()-1);
+    retstat = mkdir(fpath, mode);
+    if (retstat < 0)	retstat = -errno;
+    
+    return retstat;
+*/
 }
