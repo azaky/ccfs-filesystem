@@ -1,15 +1,25 @@
 #include "fuse_impl.hpp"
-
+#include <iostream>
+using namespace std;
 // untuk linux error number
 #include <cerrno>
 
 // pake filesystem yg ada di main.cpp
 extern CCFS filesystem;
 
+void getFullPath(char *fpath, const char *path)
+{
+//	fprintf(stderr, "Halo\n");
+//	fprintf(stderr, "rootdir = %s\n", CCFS_DATA->rootdir);
+    strcpy(fpath, CCFS_DATA->rootdir);
+//	fprintf(stderr, "Halo lagi\n");
+    strncat(fpath, path, PATH_MAX);
+}
+
 /************ Implementasi FUSE ***************/
 
 /* get attribute */
-int ccfs_getattr(const char* path, struct stat* stbuf){
+int ccfs_getattr(const char* path, struct stat* stbuf) {
 	/* jika root path */
 	if (string(path) == "/"){
 		stbuf->st_nlink = 1;
@@ -21,7 +31,7 @@ int ccfs_getattr(const char* path, struct stat* stbuf){
 		Entry entry = Entry(0, 0).getEntry(path);
 		
 		//Kalau path tidak ditemukan
-		if (entry.getName() == "") {
+		if (entry.isEmpty()) {
 			return -ENOENT;
 		}
 		
@@ -30,10 +40,10 @@ int ccfs_getattr(const char* path, struct stat* stbuf){
 		
 		// cek direktori atau bukan
 		if (entry.getAttr() & 0x8) {
-			stbuf->st_mode = S_IFDIR | (0770 + entry.getAttr() & 0x7);
+			stbuf->st_mode = S_IFDIR | (0770 + (entry.getAttr() & 0x7));
 		}
 		else {
-			stbuf->st_mode = S_IFREG | (0770 + entry.getAttr() & 0x7);
+			stbuf->st_mode = S_IFREG | (0770 + (entry.getAttr() & 0x7));
 		}
 		
 		// ukuran file
@@ -46,12 +56,15 @@ int ccfs_getattr(const char* path, struct stat* stbuf){
 	}
 }
 
-int ccfs_readdir(const char* path, void* buf, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info* fi){
+/* membaca direktori: mendaftar file & direktori dalam suatu path */
+int ccfs_readdir(const char* path, void* buf, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info* fi) {
 	// selain root directory, error
+	fprintf(stderr, "LAGI ccfs_readdir. PATH = %s\n", path);
+/*
 	if (string(path) != "/"){
 		return -ENOENT;
 	}
-	
+*/	
 	// fungsi filler digunakan untuk setiap entry pada direktori tsb
 	// ditulis ke buffer "buf"
 	
@@ -59,17 +72,23 @@ int ccfs_readdir(const char* path, void* buf, fuse_fill_dir_t filler, off_t offs
 	filler(buf, ".", NULL, 0);
 	filler(buf, "..", NULL, 0);
 	
-	Entry entry(0, 0);
-	while (!entry.isEmpty()) {
-		filler(buf, entry.getName().c_str(), NULL, 0);
+	Entry entry = Entry(0,0).getEntry(path);
+	ptr_block index = entry.getIndex();
+	entry = Entry(index,0);
+	cout<<entry.getName()<<endl;
+	while (entry.position != END_BLOCK) {
+		if(!entry.isEmpty()){
+			filler(buf, entry.getName().c_str(), NULL, 0);
+		}
 		entry = entry.nextEntry();
 	}
 	
 	return 0;
 }
 
-int ccfs_mkdir(const char *path, mode_t mode)
-{
+/* membuat direktori */
+int ccfs_mkdir(const char *path, mode_t mode) {
+	fprintf(stderr, "LAGI ccfs_mkdir. PATH = %s\n", path);
 	/* mencari parent directory */
 	int i;
 	for(i = strlen(path)-1;path[i]!='/';i--){
@@ -77,60 +96,121 @@ int ccfs_mkdir(const char *path, mode_t mode)
 	}
 	
 	string parentPath = string(path, i);
+	cout<<"parent Path = " << parentPath<<endl;
 	
-    Entry entry = Entry(0,0).getEntry(parentPath);
-    
-    ptr_block index = entry.getIndex();
-    entry = Entry(index, 0);
+    Entry entry;
+    //bagi kasus kalau dia root
+    if (parentPath == "") {
+		entry = Entry(0, 0);
+	}
+	else {
+		entry = Entry(0,0).getEntry(parentPath.c_str());
+		ptr_block index = entry.getIndex();
+		entry = Entry(index, 0);
+    }
     
     /* mencari entry kosong di parent */
-    while (!entry.isEmpty()) {
-		entry = entry.nextEntry();
-	}
-	
+    entry = entry.getNextEmptyEntry();
+    
 	/* menuliskan data di entry tersebut */
-	entry.setName(path + i);
+	entry.setName(path + i + 1);
+	cout<<entry.getName()<<endl;
 	entry.setAttr(0x0F);
 	entry.setTime(0x00);
 	entry.setDate(0x00);
-	entry.setIndex(filesystem.firstEmpty);
-	while (filesystem.nextBlock[filesystem.firstEmpty] != 0x0000) {
-		filesystem.firstEmpty++;
-	}
-	filesystem.nextBlock[filesystem.firstEmpty] = 0xFFFF;
-    entry.setSize(0x00);
+	printf("first empty = %d\n", filesystem.firstEmpty);
+	entry.setIndex(filesystem.allocateBlock());
+    entry.setSize(0x800);
     
     entry.write();
     
+    char fpath[PATH_MAX];
+    getFullPath(fpath, path);
+    fprintf(stderr, "Full Path = %s\n", fpath);
+    int retstat = 0;
+    //retstat = mkdir(fpath, mode);
+    if (retstat < 0) retstat = -errno;
+    
     return 0;
 
-/*    
-    int retstat = 0;
-    char fpath[PATH_MAX];
-
-    AKMFS_fullpath(fpath, path);
-    fprintf(stderr, "Path = %s\n", path);
-    debug("Folder sedang dibuat, tekan enter untuk melanjutkan");
-	// Get first free
-  addresstype v_addr = (addresstype) (getFSFirstFreeAddress() & 0xffff);
-  
-  // File ini akan ditaruh di direktori mana dengan cara ambil alamat pertama 
-  // block entry yang kosong
-  unsigned int address = getAddFreeEntryFromPath(path);
-  if (address==0) return -errno;
-
-  // Taruh entry data
-  attrtype attr = getAttributeType(0, 0, 0, 1);
-  addEntryPathToAddress(path, address, attr, v_addr);
-  
-  // Ganti first free di VI ke free yang baru <-- ini gimana...
-  changeFSFirstAddress(getNEWFSFirstAddress(v_addr));
-  
-  // Kurangi free capacity di VI
-  changeFSFreeCapacity(getFSFreeCapacity()-1);
-    retstat = mkdir(fpath, mode);
-    if (retstat < 0)	retstat = -errno;
-    
-    return retstat;
-*/
+	//jangan lupa urusin mode
 }
+
+/* memeriksa apakah file ada atau tidak */
+int ccfs_open(const char* path, struct fuse_file_info* fi) {
+	/* hanya mengecek apakah file ada atau tidak */
+
+	Entry entry = Entry(0,0).getEntry(path);
+	
+	if(entry.isEmpty()) {
+		return -ENOENT;
+	}
+	
+	if ((fi->flags & 3) != O_RDONLY)
+		return -EACCES;
+	
+	return 0;
+}
+
+/* menghapus direktori */
+int ccfs_rmdir(const char *path) {
+	/* mencari entry dengan nama path */
+	
+	Entry entry = Entry(0,0).getEntry(path);
+	if(entry.getName() == ""){
+		return -ENOENT;
+	}
+	entry.setName("");
+	
+	/* masuk ke direktori dari indeks */
+	/* menghapus dari tiap allocation table */
+	filesystem.freeBlock(entry.getIndex());
+	//removeDir(entry.getIndex());
+	entry.write();
+	
+	return 0;
+}
+
+void removeDir(ptr_block Alloc) {
+	if(filesystem.nextBlock[Alloc] != 0xFFFF){
+		removeDir(filesystem.nextBlock[Alloc]);
+	}
+	filesystem.nextBlock[Alloc] = 0x0000;
+	filesystem.writeAllocationTable(Alloc);
+}
+
+/* menamai direktori */
+int ccfs_rename(const char* path, const char* newpath) {
+	
+	Entry entryAsal = Entry(0,0).getEntry(path);
+	Entry entryLast = Entry(0,0).getNewEntry(newpath);
+	if(!entryAsal.isEmpty()){
+		printf("entry Last: [%s] (%d, %d)\n", entryLast.getName().c_str(), entryLast.position, entryLast.offset);
+		entryLast.setName(entryAsal.getName().c_str());
+		entryLast.setAttr(entryAsal.getAttr());
+		entryLast.setIndex(entryAsal.getIndex());
+		entryLast.setSize(entryAsal.getSize());
+		entryLast.setTime(entryAsal.getTime());
+		entryLast.setDate(entryAsal.getDate());
+		entryLast.write();
+		/* set entry asal jadi kosong */
+		entryAsal.setName("");
+		entryAsal.write();
+	}
+	else
+		return -ENOENT;
+}
+
+/* ??? */
+int ccfs_unlink(const char *path) {
+	Entry entry = Entry(0,0).getEntry(path);
+	if(entry.getAttr() & 0x8){
+		return -ENOENT;
+	}
+	else{
+		entry.setName("");
+		entry.write();
+	}
+}
+
+

@@ -14,7 +14,6 @@ extern CCFS filesystem;
 CCFS::CCFS(){
 	time(&mount_time);
 }
-
 /** destruktor */
 CCFS::~CCFS(){
 	handle.close();
@@ -47,10 +46,11 @@ void CCFS::initVolumeInformation(const char *filename) {
 	memcpy(buffer + 0x00, "CCFS", 4);
 	
 	/* Nama volume */
+	this->filename = string(filename);
 	memcpy(buffer + 0x04, filename, strlen(filename));
 	
 	/* Kapasitas filesystem, dalam little endian */
-	int capacity = N_BLOCK;
+	capacity = N_BLOCK;
 	memcpy(buffer + 0x24, (char*)&capacity, 4);
 	
 	/* Jumlah blok yang belum terpakai, dalam little endian */
@@ -75,7 +75,9 @@ void CCFS::initAllocationTable() {
 	
 	/* Allocation Table untuk lainnya */
 	buffer = 0;
-	handle.write((char*)&buffer, sizeof(short));
+	for (int i = 1; i < N_BLOCK; i++) {
+		handle.write((char*)&buffer, sizeof(short));
+	}
 }
 /** inisialisasi Data Pool */
 void CCFS::initDataPool() {
@@ -118,11 +120,14 @@ void CCFS::readVolumeInformation() {
 		throw runtime_error("File is not a valid CCFS file");
 	}
 	
+	/* baca capacity */
+	memcpy((char*)&capacity, buffer + 0x24, 4);
+	
 	/* baca available */
-	memcpy((char*)&available, buffer + 0x24, 4);
+	memcpy((char*)&available, buffer + 0x28, 4);
 	
 	/* baca firstEmpty */
-	memcpy((char*)&firstEmpty, buffer + 0x28, 4);
+	memcpy((char*)&firstEmpty, buffer + 0x2C, 4);
 }
 /** membaca Allocation Table */
 void CCFS::readAllocationTable() {
@@ -136,6 +141,65 @@ void CCFS::readAllocationTable() {
 		handle.read(buffer, 2);
 		memcpy((char*)&nextBlock[i], buffer, 2);
 	}
+}
+/** menuliskan Volume Information */
+void CCFS::writeVolumeInformation() {
+	handle.seekp(0x00);
+	
+	/* buffer untuk menulis ke file */
+	char buffer[BLOCK_SIZE];
+	memset(buffer, 0, BLOCK_SIZE);
+	
+	/* Magic string "CCFS" */
+	memcpy(buffer + 0x00, "CCFS", 4);
+	
+	/* Nama volume */
+	memcpy(buffer + 0x04, filename.c_str(), filename.length());
+	
+	/* Kapasitas filesystem, dalam little endian */
+	memcpy(buffer + 0x24, (char*)&capacity, 4);
+	
+	/* Jumlah blok yang belum terpakai, dalam little endian */
+	memcpy(buffer + 0x28, (char*)&available, 4);
+	
+	/* Indeks blok pertama yang bebas, dalam little endian */
+	memcpy(buffer + 0x2C, (char*)&firstEmpty, 4);
+	
+	/* String "SFCC" */
+	memcpy(buffer + 0x1FC, "SFCC", 4);
+	
+	handle.write(buffer, BLOCK_SIZE);
+}
+/** menuliskan Allocation Table pada posisi tertentu */
+void CCFS::writeAllocationTable(ptr_block position) {
+	handle.seekp(BLOCK_SIZE + sizeof(ptr_block) * position);
+	handle.write((char*)&nextBlock[position], sizeof(ptr_block));
+}
+
+/** mendapatkan first Empty yang berikutnya */
+ptr_block CCFS::allocateBlock() {
+	ptr_block result = firstEmpty;
+	
+	nextBlock[firstEmpty] = END_BLOCK;
+	writeAllocationTable(result);
+	
+	while (nextBlock[firstEmpty] != 0x0000) {
+		firstEmpty++;
+	}
+	available--;
+	writeVolumeInformation();
+	return result;
+}
+/** membebaskan blok */
+void CCFS::freeBlock(ptr_block position) {
+	while (position != END_BLOCK) {
+		ptr_block temp = nextBlock[position];
+		nextBlock[position] = EMPTY_BLOCK;
+		writeAllocationTable(position);
+		position = temp;
+		available--;
+	}
+	writeVolumeInformation();
 }
 
 /**                   *
@@ -170,20 +234,22 @@ Entry Entry::nextEntry() {
 
 /** Mendapatkan Entry dari path */
 Entry Entry::getEntry(const char *path) {
+	printf("Entry::getEntry(%s)\n", path);
 	/* mendapatkan direktori teratas */
 	int endstr = 1;
 	while (path[endstr] != '/' && endstr < strlen(path)) {
 		endstr++;
 	}
 	string topDirectory = string(path + 1, endstr - 1);
+	printf("topDirectory = [%s]\n", topDirectory.c_str());
 	
 	/* mencari entri dengan nama topDirectory */
-	while (getName() != topDirectory && getName() != "") {
+	while (getName() != topDirectory && position != END_BLOCK) {
 		*this = nextEntry();
 	}
 	
 	/* kalau tidak ketemu, return Entry kosong */
-	if (getName() != "") {
+	if (isEmpty()) {
 		return Entry();
 	}
 	/* kalau ketemu, */
@@ -206,8 +272,85 @@ Entry Entry::getEntry(const char *path) {
 	}
 }
 
+/** Mendapatkan Entry dari path */
+Entry Entry::getNewEntry(const char *path) {
+	/* mendapatkan direktori teratas */
+	int endstr = 1;
+	while (path[endstr] != '/' && endstr < strlen(path)) {
+		endstr++;
+	}
+	string topDirectory = string(path + 1, endstr - 1);
+	printf("topDirectory = [%s]\n", topDirectory.c_str());
+	
+	/* mencari entri dengan nama topDirectory */
+	Entry entry(position, offset);
+	while (getName() != topDirectory && position != END_BLOCK) {
+		*this = nextEntry();
+	}
+	
+	/* kalau tidak ketemu, buat entry baru */
+	if (isEmpty()) {
+		while (!entry.isEmpty()) {
+			if (entry.nextEntry().position == END_BLOCK) {
+				entry = Entry(filesystem.allocateBlock(), 0);
+			}
+			else {
+				entry = entry.nextEntry();
+			}
+		}
+		/* beri atribut pada entry */
+		entry.setName(topDirectory.c_str());
+		entry.setAttr(0xF);
+		entry.setIndex(filesystem.allocateBlock());
+		entry.setSize(BLOCK_SIZE);
+		entry.setTime(0);
+		entry.setDate(0);
+		entry.write();
+		
+		*this = entry;
+	}
+	
+	if (endstr == strlen(path)) {
+		return *this;
+	}
+	else {
+		/* cek apakah direktori atau bukan */
+		if (getAttr() & 0x8) {
+			ptr_block index;
+			memcpy((char*)&index, data + 0x1A, 2);
+			Entry next(index, 0);
+			return next.getNewEntry(path + endstr);
+		}
+		else {
+			return Entry();
+		}
+	}
+}
+
+/** Mengembalikan entry kosong selanjutnya. Jika blok penuh, akan dibuatkan entri baru */
+Entry Entry::getNextEmptyEntry() {
+	Entry entry(*this);
+	
+	while (!entry.isEmpty()) {
+		entry = entry.nextEntry();
+	}
+	if (entry.position == END_BLOCK) {
+		/* berarti blok saat ini sudah penuh, buat blok baru */
+		ptr_block newPosition = filesystem.allocateBlock();
+		ptr_block lastPos = position;
+		while (filesystem.nextBlock[lastPos] != END_BLOCK) {
+			lastPos = filesystem.nextBlock[lastPos];
+		}
+		filesystem.nextBlock[lastPos] = newPosition;
+		entry.position = newPosition;
+		entry.offset = 0;
+	}
+	
+	return entry;
+}
+
 /** Memeriksa apakah Entry kosong atau tidak */
-int isEmpty() {
+int Entry::isEmpty() {
 	return *(data) == 0;
 }
 
@@ -271,4 +414,6 @@ void Entry::setSize(const int size) {
 void Entry::write() {
 	filesystem.handle.seekp(BLOCK_SIZE * DATA_POOL_OFFSET + position * BLOCK_SIZE + offset * ENTRY_SIZE);
 	filesystem.handle.write(data, ENTRY_SIZE);
+	//update Volume Information
+	filesystem.writeVolumeInformation();
 }

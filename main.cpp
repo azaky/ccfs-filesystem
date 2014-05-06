@@ -12,6 +12,10 @@ void init_fuse(){
 	ccfs_op.getattr	= ccfs_getattr;
 	ccfs_op.readdir	= ccfs_readdir;
 	ccfs_op.mkdir	= ccfs_mkdir;
+	ccfs_op.open 	= ccfs_open;
+	ccfs_op.rmdir 	= ccfs_rmdir;
+	ccfs_op.rename  = ccfs_rename;
+	ccfs_op.unlink  = ccfs_unlink;
 }
 
 int main(int argc, char** argv){
@@ -24,13 +28,17 @@ int main(int argc, char** argv){
 	filesystem.load(argv[2]);
 	
 	// inisialisasi fuse
-	int fuse_argc = 2; 
-	char* fuse_argv[2] = {argv[0], argv[1]};
+	CCFS_state *CCFS_data;
+	CCFS_data = (CCFS_state*) malloc(sizeof(CCFS_state));
+    CCFS_data->rootdir = realpath(argv[1], NULL);
+    
+	int fuse_argc = 3; 
+	char* fuse_argv[3] = {argv[0], "-d", argv[1]};
 	
 	init_fuse();
 	
 	// serahkan ke fuse
-	return fuse_main(fuse_argc, fuse_argv, &ccfs_op, NULL);
+	return fuse_main(fuse_argc, fuse_argv, &ccfs_op, CCFS_data);
 }
 
 /*
