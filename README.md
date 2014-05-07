@@ -10,4 +10,8 @@ List of implemented methods:
 - rmdir
 - rename
 - open
-
+- unlink
+- mknode
+- truncate
+- open
+- write

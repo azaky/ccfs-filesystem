@@ -8,7 +8,7 @@ struct fuse_operations ccfs_op;
 
 CCFS filesystem;
 
-void init_fuse(){
+void init_fuse() {
 	ccfs_op.getattr	= ccfs_getattr;
 	ccfs_op.readdir	= ccfs_readdir;
 	ccfs_op.mkdir	= ccfs_mkdir;
@@ -18,6 +18,8 @@ void init_fuse(){
 	ccfs_op.unlink	= ccfs_unlink;
 	ccfs_op.mknod	= ccfs_mknod;
 	ccfs_op.truncate= ccfs_truncate;
+	ccfs_op.write	= ccfs_write;
+	ccfs_op.read	= ccfs_read;
 }
 
 int main(int argc, char** argv){

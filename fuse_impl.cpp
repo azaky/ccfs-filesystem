@@ -137,9 +137,6 @@ int ccfs_open(const char* path, struct fuse_file_info* fi) {
 		return -ENOENT;
 	}
 	
-	if ((fi->flags & 3) == O_RDONLY)
-		return -EACCES;
-	
 	return 0;
 }
 
@@ -232,7 +229,7 @@ int ccfs_mknod(const char *path, mode_t mode, dev_t dev) {
 	entry.setTime(0x00);
 	entry.setDate(0x00);
 	entry.setIndex(filesystem.allocateBlock());
-	entry.setSize(0x800);
+	entry.setSize(0x00);
 
 	entry.write();
 
@@ -263,5 +260,38 @@ int ccfs_truncate(const char *path, off_t newsize) {
 	filesystem.setNextBlock(position, END_BLOCK);
 	
 	return 0;
+}
+
+/* read buffer dari filesystem */
+int ccfs_read(const char *path,char *buf,size_t size,off_t offset,struct fuse_file_info *fi){
+	//menuju ke entry
+	Entry entry = Entry(0,0).getEntry(path);
+	ptr_block index = entry.getIndex();
+	
+	//kalo namanya kosong
+	if(entry.isEmpty()){
+		return -ENOENT;
+	}
+	
+	//read
+	return filesystem.readBlock(index,buf,size-offset,offset);
+	
+}
+
+/* write buffer ke filesystem */
+int ccfs_write(const char *path,const char *buf,size_t size,off_t offset,struct fuse_file_info *fi){
+	Entry entry = Entry(0,0).getEntry(path);
+	ptr_block index = entry.getIndex();
+	
+	//kalo namanya kosong
+	if(entry.isEmpty()){
+		return -ENOENT;
+	}
+	
+	entry.setSize(size);
+	entry.write();
+	
+	return filesystem.writeBlock(index,buf,size-offset,offset);
+	
 }
 
