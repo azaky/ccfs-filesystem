@@ -14,8 +14,9 @@ void init_fuse(){
 	ccfs_op.mkdir	= ccfs_mkdir;
 	ccfs_op.open 	= ccfs_open;
 	ccfs_op.rmdir 	= ccfs_rmdir;
-	ccfs_op.rename  = ccfs_rename;
-	ccfs_op.unlink  = ccfs_unlink;
+	ccfs_op.rename	= ccfs_rename;
+	ccfs_op.unlink	= ccfs_unlink;
+	ccfs_op.mknod	= ccfs_mknod;
 }
 
 int main(int argc, char** argv){

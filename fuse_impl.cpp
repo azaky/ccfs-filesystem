@@ -199,3 +199,10 @@ int ccfs_unlink(const char *path) {
 	}
 	return 0;
 }
+
+/* ??? */
+int ccfs_mknod(const char *path, mode_t mode, dev_t dev) {
+	
+	
+	return 0;
+}

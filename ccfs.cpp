@@ -226,6 +226,28 @@ void CCFS::readBlock(ptr_block position, char *buffer, int size, int offset) {
 	}
 }
 
+/** menuliskan isi buffer ke filesystem */
+void CCFS::writeBlock(ptr_block position, char *buffer, int size, int offset) {
+	/* kalau sudah di END_BLOCK, return */
+	if (position == END_BLOCK) {
+		return;
+	}
+	handle.seekp(BLOCK_SIZE * DATA_POOL_OFFSET + position * BLOCK_SIZE + offset);
+	int size_now = size;
+	if (size_now > BLOCK_SIZE) {
+		size_now = BLOCK_SIZE;
+	}
+	handle.write(buffer, size_now);
+	
+	/* kalau size > block size, lanjutkan di nextBlock */
+	if (size > BLOCK_SIZE) {
+		/* kalau nextBlock tidak ada, alokasikan */
+		if (nextBlock[position] == END_BLOCK) {
+			setNextBlock(position, allocateBlock());
+		}
+		writeBlock(nextBlock[position], buffer + BLOCK_SIZE, size - BLOCK_SIZE);
+	}
+}
 
 /**                   *
  * BAGIAN KELAS ENTRY *
