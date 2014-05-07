@@ -195,6 +195,9 @@ ptr_block CCFS::allocateBlock() {
 }
 /** membebaskan blok */
 void CCFS::freeBlock(ptr_block position) {
+	if (position == EMPTY_BLOCK) {
+		return;
+	}
 	while (position != END_BLOCK) {
 		ptr_block temp = nextBlock[position];
 		setNextBlock(position, EMPTY_BLOCK);
@@ -203,6 +206,26 @@ void CCFS::freeBlock(ptr_block position) {
 	}
 	writeVolumeInformation();
 }
+/** membaca isi block sebesar size kemudian menaruh hasilnya di buf */
+void CCFS::readBlock(ptr_block position, char *buffer, int size, int offset) {
+	/* kalau sudah di END_BLOCK, return */
+	if (position == END_BLOCK) {
+		return;
+	}
+	handle.seekg(BLOCK_SIZE * DATA_POOL_OFFSET + position * BLOCK_SIZE + offset);
+	int size_now = size;
+	/* cuma bisa baca sampai sebesar block size */
+	if (size_now > BLOCK_SIZE) {
+		size_now = BLOCK_SIZE;
+	}
+	handle.read(buffer, size_now);
+	
+	/* kalau size > block size, lanjutkan di nextBlock */
+	if (size > BLOCK_SIZE) {
+		readBlock(nextBlock[position], buffer + BLOCK_SIZE, size - BLOCK_SIZE);
+	}
+}
+
 
 /**                   *
  * BAGIAN KELAS ENTRY *
@@ -354,9 +377,11 @@ Entry Entry::getNextEmptyEntry() {
 /** mengosongkan entry */
 void Entry::makeEmpty() {
 	/* hapus index? */
+	/*
 	if (getIndex() != EMPTY_BLOCK && getIndex() != END_BLOCK) {
 		filesystem.freeBlock(getIndex());
 	}
+	*/
 	/* menghapus byte pertama data */
 	*(data) = 0;
 	write();

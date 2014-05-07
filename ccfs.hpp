@@ -51,9 +51,13 @@ public:
 	void writeVolumeInformation();
 	void writeAllocationTable(ptr_block position);
 	
+	/* bagian alokasi block */
 	void setNextBlock(ptr_block position, ptr_block next);
 	ptr_block allocateBlock();
 	void freeBlock(ptr_block position);
+	
+	/* bagian baca/tulis block */
+	void readBlock(ptr_block position, char *buffer, int size, int offset = 0);
 
 /* Attributes */
 	fstream handle;			// file .ccfs

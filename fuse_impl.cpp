@@ -147,7 +147,7 @@ int ccfs_open(const char* path, struct fuse_file_info* fi) {
 int ccfs_rmdir(const char *path) {
 	/* mencari entry dengan nama path */
 	Entry entry = Entry(0,0).getEntry(path);
-	if(entry.getName() == ""){
+	if(entry.isEmpty()){
 		return -ENOENT;
 	}
 	
