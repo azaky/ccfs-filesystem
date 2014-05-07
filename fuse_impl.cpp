@@ -43,7 +43,7 @@ int ccfs_getattr(const char* path, struct stat* stbuf) {
 			stbuf->st_mode = S_IFDIR | (0770 + (entry.getAttr() & 0x7));
 		}
 		else {
-			stbuf->st_mode = S_IFREG | (0770 + (entry.getAttr() & 0x7));
+			stbuf->st_mode = S_IFREG | (0660 + (entry.getAttr() & 0x7));
 		}
 		
 		// ukuran file
@@ -202,7 +202,7 @@ int ccfs_unlink(const char *path) {
 	return 0;
 }
 
-/* buat  */
+/* buat bikin file */
 int ccfs_mknod(const char *path, mode_t mode, dev_t dev) {
 	/* mencari parent directory */
 	int i;
@@ -228,7 +228,7 @@ int ccfs_mknod(const char *path, mode_t mode, dev_t dev) {
     
 	/* menuliskan data di entry tersebut */
 	entry.setName(path + i + 1);
-	entry.setAttr(0x1B4);
+	entry.setAttr(0x06);
 	entry.setTime(0x00);
 	entry.setDate(0x00);
 	entry.setIndex(filesystem.allocateBlock());
@@ -238,3 +238,30 @@ int ccfs_mknod(const char *path, mode_t mode, dev_t dev) {
 
 	return 0;
 }
+
+/* set file size */
+int ccfs_truncate(const char *path, off_t newsize) {
+	Entry entry = Entry(0, 0).getEntry(path);
+	
+	/* set sizenya */
+	entry.setSize(newsize);
+	entry.write();
+	
+	/* urusin allocation table */
+	ptr_block position = entry.getIndex();
+	while (newsize > 0) {
+		newsize -= BLOCK_SIZE;
+		if (newsize > 0) {
+			/* kalau gak cukup, alokasiin baru */
+			if (filesystem.nextBlock[position] == END_BLOCK) {
+				filesystem.setNextBlock(position, filesystem.allocateBlock());
+			}
+			position = filesystem.nextBlock[position];
+		}
+	}
+	filesystem.freeBlock(filesystem.nextBlock[position]);
+	filesystem.setNextBlock(position, END_BLOCK);
+	
+	return 0;
+}
+

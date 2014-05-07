@@ -229,7 +229,7 @@ int CCFS::readBlock(ptr_block position, char *buffer, int size, int offset) {
 }
 
 /** menuliskan isi buffer ke filesystem */
-int CCFS::writeBlock(ptr_block position, const char *buffer, int size, int offset,int *blockTime) {
+int CCFS::writeBlock(ptr_block position, const char *buffer, int size, int offset) {
 	/* kalau sudah di END_BLOCK, return */
 	if (position == END_BLOCK) {
 		return 0;

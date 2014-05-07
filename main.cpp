@@ -17,6 +17,7 @@ void init_fuse(){
 	ccfs_op.rename	= ccfs_rename;
 	ccfs_op.unlink	= ccfs_unlink;
 	ccfs_op.mknod	= ccfs_mknod;
+	ccfs_op.truncate= ccfs_truncate;
 }
 
 int main(int argc, char** argv){

@@ -47,3 +47,5 @@ int ccfs_rename(const char* path, const char* newpath);
 int ccfs_unlink(const char *path);
 
 int ccfs_mknod(const char *path, mode_t mode, dev_t dev);
+
+int ccfs_truncate(const char *path, off_t newsize);
