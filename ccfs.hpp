@@ -57,8 +57,8 @@ public:
 	void freeBlock(ptr_block position);
 	
 	/* bagian baca/tulis block */
-	void readBlock(ptr_block position, char *buffer, int size, int offset = 0);
-	void writeBlock(ptr_block position, char *buffer, int size, int offset = 0);
+	int readBlock(ptr_block position, char *buffer, int size, int offset = 0);
+	void writeBlock(ptr_block position, const char *buffer, int size, int offset = 0);
 
 /* Attributes */
 	fstream handle;			// file .ccfs

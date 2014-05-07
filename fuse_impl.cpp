@@ -137,7 +137,7 @@ int ccfs_open(const char* path, struct fuse_file_info* fi) {
 		return -ENOENT;
 	}
 	
-	if ((fi->flags & 3) != O_RDONLY)
+	if ((fi->flags & 3) == O_RDONLY)
 		return -EACCES;
 	
 	return 0;
@@ -186,6 +186,8 @@ int ccfs_rename(const char* path, const char* newpath) {
 	}
 	else
 		return -ENOENT;
+	
+	return 0;
 }
 
 /* ??? */
@@ -200,9 +202,39 @@ int ccfs_unlink(const char *path) {
 	return 0;
 }
 
-/* ??? */
+/* buat  */
 int ccfs_mknod(const char *path, mode_t mode, dev_t dev) {
+	/* mencari parent directory */
+	int i;
+	for(i = strlen(path)-1;path[i]!='/';i--){
+		
+	}
 	
+	string parentPath = string(path, i);
 	
+    Entry entry;
+    //bagi kasus kalau dia root
+    if (parentPath == "") {
+		entry = Entry(0, 0);
+	}
+	else {
+		entry = Entry(0,0).getEntry(parentPath.c_str());
+		ptr_block index = entry.getIndex();
+		entry = Entry(index, 0);
+    }
+    
+    /* mencari entry kosong di parent */
+    entry = entry.getNextEmptyEntry();
+    
+	/* menuliskan data di entry tersebut */
+	entry.setName(path + i + 1);
+	entry.setAttr(0x1B4);
+	entry.setTime(0x00);
+	entry.setDate(0x00);
+	entry.setIndex(filesystem.allocateBlock());
+	entry.setSize(0x800);
+
+	entry.write();
+
 	return 0;
 }

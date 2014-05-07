@@ -207,10 +207,10 @@ void CCFS::freeBlock(ptr_block position) {
 	writeVolumeInformation();
 }
 /** membaca isi block sebesar size kemudian menaruh hasilnya di buf */
-void CCFS::readBlock(ptr_block position, char *buffer, int size, int offset) {
+int CCFS::readBlock(ptr_block position, char *buffer, int size, int offset) {
 	/* kalau sudah di END_BLOCK, return */
 	if (position == END_BLOCK) {
-		return;
+		return 0;
 	}
 	handle.seekg(BLOCK_SIZE * DATA_POOL_OFFSET + position * BLOCK_SIZE + offset);
 	int size_now = size;
@@ -222,15 +222,15 @@ void CCFS::readBlock(ptr_block position, char *buffer, int size, int offset) {
 	
 	/* kalau size > block size, lanjutkan di nextBlock */
 	if (size > BLOCK_SIZE) {
-		readBlock(nextBlock[position], buffer + BLOCK_SIZE, size - BLOCK_SIZE);
+		return size_now + readBlock(nextBlock[position], buffer + BLOCK_SIZE, size - BLOCK_SIZE);
 	}
 }
 
 /** menuliskan isi buffer ke filesystem */
-void CCFS::writeBlock(ptr_block position, char *buffer, int size, int offset) {
+int CCFS::writeBlock(ptr_block position, const char *buffer, int size, int offset,int *blockTime) {
 	/* kalau sudah di END_BLOCK, return */
 	if (position == END_BLOCK) {
-		return;
+		return 0;
 	}
 	handle.seekp(BLOCK_SIZE * DATA_POOL_OFFSET + position * BLOCK_SIZE + offset);
 	int size_now = size;
@@ -245,7 +245,7 @@ void CCFS::writeBlock(ptr_block position, char *buffer, int size, int offset) {
 		if (nextBlock[position] == END_BLOCK) {
 			setNextBlock(position, allocateBlock());
 		}
-		writeBlock(nextBlock[position], buffer + BLOCK_SIZE, size - BLOCK_SIZE);
+		return size_now + writeBlock(nextBlock[position], buffer + BLOCK_SIZE, size - BLOCK_SIZE);
 	}
 }
 
