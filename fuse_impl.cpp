@@ -1,20 +1,8 @@
 #include "fuse_impl.hpp"
-#include <iostream>
 using namespace std;
-// untuk linux error number
-#include <cerrno>
 
 // pake filesystem yg ada di main.cpp
 extern CCFS filesystem;
-
-void getFullPath(char *fpath, const char *path)
-{
-//	fprintf(stderr, "Halo\n");
-//	fprintf(stderr, "rootdir = %s\n", CCFS_DATA->rootdir);
-	strcpy(fpath, CCFS_DATA->rootdir);
-//	fprintf(stderr, "Halo lagi\n");
-	strncat(fpath, path, PATH_MAX);
-}
 
 /************ Implementasi FUSE ***************/
 
@@ -87,15 +75,11 @@ int ccfs_readdir(const char* path, void* buf, fuse_fill_dir_t filler, off_t offs
 
 /* membuat direktori */
 int ccfs_mkdir(const char *path, mode_t mode) {
-	fprintf(stderr, "LAGI ccfs_mkdir. PATH = %s\n", path);
 	/* mencari parent directory */
 	int i;
-	for(i = strlen(path)-1;path[i]!='/';i--){
-		
-	}
+	for(i = strlen(path)-1;path[i]!='/';i--);
 	
 	string parentPath = string(path, i);
-	cout<<"parent Path = " << parentPath<<endl;
 	
     Entry entry;
     //bagi kasus kalau dia root
@@ -113,7 +97,6 @@ int ccfs_mkdir(const char *path, mode_t mode) {
     
 	/* menuliskan data di entry tersebut */
 	entry.setName(path + i + 1);
-	cout<<entry.getName()<<endl;
 	entry.setAttr(0x0F);
 	entry.setTime(0x00);
 	entry.setDate(0x00);
@@ -157,13 +140,6 @@ int ccfs_rmdir(const char *path) {
 	return 0;
 }
 
-void removeDir(ptr_block Alloc) {
-	if(filesystem.nextBlock[Alloc] != 0xFFFF){
-		removeDir(filesystem.nextBlock[Alloc]);
-	}
-	filesystem.setNextBlock(Alloc, EMPTY_BLOCK);
-}
-
 /* menamai direktori */
 int ccfs_rename(const char* path, const char* newpath) {
 	
@@ -187,13 +163,14 @@ int ccfs_rename(const char* path, const char* newpath) {
 	return 0;
 }
 
-/* ??? */
+/* menghapus file */
 int ccfs_unlink(const char *path) {
 	Entry entry = Entry(0,0).getEntry(path);
 	if(entry.getAttr() & 0x8){
 		return -ENOENT;
 	}
 	else{
+		filesystem.freeBlock(entry.getIndex());
 		entry.makeEmpty();
 	}
 	return 0;

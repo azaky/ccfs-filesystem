@@ -5,12 +5,6 @@
 // pakai versi 26
 #define FUSE_USE_VERSION 26
 
-#define PATH_MAX 100
-struct CCFS_state {
-    char *rootdir;
-};
-#define CCFS_DATA ((struct CCFS_state *) fuse_get_context()->private_data)
-
 #include <stdio.h>
 #include <ctype.h>
 #include <dirent.h>
@@ -39,8 +33,6 @@ int ccfs_mkdir(const char *path, mode_t mode);
 int ccfs_open(const char* path, struct fuse_file_info* fi);
 
 int ccfs_rmdir(const char *path);
-
-void removeDir(ptr_block Alloc);
 
 int ccfs_rename(const char* path, const char* newpath);
 
