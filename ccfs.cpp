@@ -175,13 +175,16 @@ void CCFS::writeAllocationTable(ptr_block position) {
 	handle.seekp(BLOCK_SIZE + sizeof(ptr_block) * position);
 	handle.write((char*)&nextBlock[position], sizeof(ptr_block));
 }
-
+/** mengatur Allocation Table */
+void CCFS::setNextBlock(ptr_block position, ptr_block next) {
+	nextBlock[position] = next;
+	writeAllocationTable(position);
+}
 /** mendapatkan first Empty yang berikutnya */
 ptr_block CCFS::allocateBlock() {
 	ptr_block result = firstEmpty;
 	
-	nextBlock[firstEmpty] = END_BLOCK;
-	writeAllocationTable(result);
+	setNextBlock(result, END_BLOCK);
 	
 	while (nextBlock[firstEmpty] != 0x0000) {
 		firstEmpty++;
@@ -194,8 +197,7 @@ ptr_block CCFS::allocateBlock() {
 void CCFS::freeBlock(ptr_block position) {
 	while (position != END_BLOCK) {
 		ptr_block temp = nextBlock[position];
-		nextBlock[position] = EMPTY_BLOCK;
-		writeAllocationTable(position);
+		setNextBlock(position, EMPTY_BLOCK);
 		position = temp;
 		available--;
 	}
@@ -236,7 +238,7 @@ Entry Entry::nextEntry() {
 Entry Entry::getEntry(const char *path) {
 	printf("Entry::getEntry(%s)\n", path);
 	/* mendapatkan direktori teratas */
-	int endstr = 1;
+	unsigned int endstr = 1;
 	while (path[endstr] != '/' && endstr < strlen(path)) {
 		endstr++;
 	}
@@ -275,7 +277,7 @@ Entry Entry::getEntry(const char *path) {
 /** Mendapatkan Entry dari path */
 Entry Entry::getNewEntry(const char *path) {
 	/* mendapatkan direktori teratas */
-	int endstr = 1;
+	unsigned int endstr = 1;
 	while (path[endstr] != '/' && endstr < strlen(path)) {
 		endstr++;
 	}
@@ -341,7 +343,7 @@ Entry Entry::getNextEmptyEntry() {
 		while (filesystem.nextBlock[lastPos] != END_BLOCK) {
 			lastPos = filesystem.nextBlock[lastPos];
 		}
-		filesystem.nextBlock[lastPos] = newPosition;
+		filesystem.setNextBlock(lastPos, newPosition);
 		entry.position = newPosition;
 		entry.offset = 0;
 	}
@@ -349,12 +351,23 @@ Entry Entry::getNextEmptyEntry() {
 	return entry;
 }
 
+/** mengosongkan entry */
+void Entry::makeEmpty() {
+	/* hapus index? */
+	if (getIndex() != EMPTY_BLOCK && getIndex() != END_BLOCK) {
+		filesystem.freeBlock(getIndex());
+	}
+	/* menghapus byte pertama data */
+	*(data) = 0;
+	write();
+}
+
 /** Memeriksa apakah Entry kosong atau tidak */
 int Entry::isEmpty() {
 	return *(data) == 0;
 }
 
-/** Mendapatkan atribut-atribut Entry */
+/** Getter-Setter atribut-atribut Entry */
 string Entry::getName() {
 	return string(data);
 }
@@ -411,9 +424,10 @@ void Entry::setSize(const int size) {
 	memcpy(data + 0x1C, (char*)&size, 4);
 }
 
+/** Menuliskan entry ke filesystem */
 void Entry::write() {
-	filesystem.handle.seekp(BLOCK_SIZE * DATA_POOL_OFFSET + position * BLOCK_SIZE + offset * ENTRY_SIZE);
-	filesystem.handle.write(data, ENTRY_SIZE);
-	//update Volume Information
-	filesystem.writeVolumeInformation();
+	if (position != END_BLOCK) {
+		filesystem.handle.seekp(BLOCK_SIZE * DATA_POOL_OFFSET + position * BLOCK_SIZE + offset * ENTRY_SIZE);
+		filesystem.handle.write(data, ENTRY_SIZE);
+	}
 }

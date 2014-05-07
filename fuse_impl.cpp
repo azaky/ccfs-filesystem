@@ -11,9 +11,9 @@ void getFullPath(char *fpath, const char *path)
 {
 //	fprintf(stderr, "Halo\n");
 //	fprintf(stderr, "rootdir = %s\n", CCFS_DATA->rootdir);
-    strcpy(fpath, CCFS_DATA->rootdir);
+	strcpy(fpath, CCFS_DATA->rootdir);
 //	fprintf(stderr, "Halo lagi\n");
-    strncat(fpath, path, PATH_MAX);
+	strncat(fpath, path, PATH_MAX);
 }
 
 /************ Implementasi FUSE ***************/
@@ -75,7 +75,6 @@ int ccfs_readdir(const char* path, void* buf, fuse_fill_dir_t filler, off_t offs
 	Entry entry = Entry(0,0).getEntry(path);
 	ptr_block index = entry.getIndex();
 	entry = Entry(index,0);
-	cout<<entry.getName()<<endl;
 	while (entry.position != END_BLOCK) {
 		if(!entry.isEmpty()){
 			filler(buf, entry.getName().c_str(), NULL, 0);
@@ -118,20 +117,12 @@ int ccfs_mkdir(const char *path, mode_t mode) {
 	entry.setAttr(0x0F);
 	entry.setTime(0x00);
 	entry.setDate(0x00);
-	printf("first empty = %d\n", filesystem.firstEmpty);
 	entry.setIndex(filesystem.allocateBlock());
-    entry.setSize(0x800);
-    
-    entry.write();
-    
-    char fpath[PATH_MAX];
-    getFullPath(fpath, path);
-    fprintf(stderr, "Full Path = %s\n", fpath);
-    int retstat = 0;
-    //retstat = mkdir(fpath, mode);
-    if (retstat < 0) retstat = -errno;
-    
-    return 0;
+	entry.setSize(0x800);
+
+	entry.write();
+
+	return 0;
 
 	//jangan lupa urusin mode
 }
@@ -155,18 +146,16 @@ int ccfs_open(const char* path, struct fuse_file_info* fi) {
 /* menghapus direktori */
 int ccfs_rmdir(const char *path) {
 	/* mencari entry dengan nama path */
-	
 	Entry entry = Entry(0,0).getEntry(path);
 	if(entry.getName() == ""){
 		return -ENOENT;
 	}
-	entry.setName("");
 	
 	/* masuk ke direktori dari indeks */
 	/* menghapus dari tiap allocation table */
 	filesystem.freeBlock(entry.getIndex());
 	//removeDir(entry.getIndex());
-	entry.write();
+	entry.makeEmpty();
 	
 	return 0;
 }
@@ -175,8 +164,7 @@ void removeDir(ptr_block Alloc) {
 	if(filesystem.nextBlock[Alloc] != 0xFFFF){
 		removeDir(filesystem.nextBlock[Alloc]);
 	}
-	filesystem.nextBlock[Alloc] = 0x0000;
-	filesystem.writeAllocationTable(Alloc);
+	filesystem.setNextBlock(Alloc, EMPTY_BLOCK);
 }
 
 /* menamai direktori */
@@ -186,7 +174,7 @@ int ccfs_rename(const char* path, const char* newpath) {
 	Entry entryLast = Entry(0,0).getNewEntry(newpath);
 	if(!entryAsal.isEmpty()){
 		printf("entry Last: [%s] (%d, %d)\n", entryLast.getName().c_str(), entryLast.position, entryLast.offset);
-		entryLast.setName(entryAsal.getName().c_str());
+		//entryLast.setName(entryAsal.getName().c_str());
 		entryLast.setAttr(entryAsal.getAttr());
 		entryLast.setIndex(entryAsal.getIndex());
 		entryLast.setSize(entryAsal.getSize());
@@ -194,8 +182,7 @@ int ccfs_rename(const char* path, const char* newpath) {
 		entryLast.setDate(entryAsal.getDate());
 		entryLast.write();
 		/* set entry asal jadi kosong */
-		entryAsal.setName("");
-		entryAsal.write();
+		entryAsal.makeEmpty();
 	}
 	else
 		return -ENOENT;
@@ -208,9 +195,7 @@ int ccfs_unlink(const char *path) {
 		return -ENOENT;
 	}
 	else{
-		entry.setName("");
-		entry.write();
+		entry.makeEmpty();
 	}
+	return 0;
 }
-
-

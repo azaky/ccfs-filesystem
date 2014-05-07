@@ -51,6 +51,7 @@ public:
 	void writeVolumeInformation();
 	void writeAllocationTable(ptr_block position);
 	
+	void setNextBlock(ptr_block position, ptr_block next);
 	ptr_block allocateBlock();
 	void freeBlock(ptr_block position);
 
@@ -81,6 +82,7 @@ public:
 	Entry getNewEntry(const char *path);
 	Entry getNextEmptyEntry();
 	
+	void makeEmpty();
 	int isEmpty();
 	
 	string getName();
