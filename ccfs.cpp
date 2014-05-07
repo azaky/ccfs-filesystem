@@ -224,6 +224,8 @@ int CCFS::readBlock(ptr_block position, char *buffer, int size, int offset) {
 	if (size > BLOCK_SIZE) {
 		return size_now + readBlock(nextBlock[position], buffer + BLOCK_SIZE, size - BLOCK_SIZE);
 	}
+	
+	return size_now;
 }
 
 /** menuliskan isi buffer ke filesystem */
@@ -247,6 +249,8 @@ int CCFS::writeBlock(ptr_block position, const char *buffer, int size, int offse
 		}
 		return size_now + writeBlock(nextBlock[position], buffer + BLOCK_SIZE, size - BLOCK_SIZE);
 	}
+	
+	return size_now;
 }
 
 /**                   *
