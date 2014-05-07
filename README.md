@@ -1,9 +1,17 @@
 ccfs-filesystem
 ===============
 
-A custom filesystem built with FUSE API
+A custom filesystem built with FUSE (Filesystem in Userspace). For more information about FUSE, visit [http://fuse.sourceforge.net/](http://fuse.sourceforge.net/).
 
-List of implemented methods:
+Usage
+-----
+
+	./ccfs <mount folder> <filesystem.ccfs> [--new]
+
+If flag `--new` is used then a new empty filesystem will be created
+
+List of implemented methods
+---------------------------
 - getattr
 - readdir
 - mkdir
@@ -15,3 +23,4 @@ List of implemented methods:
 - truncate
 - open
 - write
+- link

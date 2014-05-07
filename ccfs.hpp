@@ -9,7 +9,6 @@
 #include <cstring>
 #include <string>
 #include <fstream>
-#include <string>
 #include <ctime>
 
 /** Definisi tipe **/
@@ -73,9 +72,6 @@ public:
 
 /**
  * Kelas Entry
- * time_t rawtime = time(NULL);
- * stucttm * currenttime = localtime(&rawtime)
- * short = structm->hour
  */
 class Entry {
 public:
@@ -103,6 +99,9 @@ public:
 	void setDate(const short date);
 	void setIndex(const ptr_block index);
 	void setSize(const int size);
+	
+	time_t getDateTime();
+	void setCurrentDateTime();
 	
 	void write();
 	

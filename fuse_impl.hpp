@@ -5,23 +5,12 @@
 // pakai versi 26
 #define FUSE_USE_VERSION 26
 
-#include <stdio.h>
-#include <ctype.h>
-#include <dirent.h>
 #include <errno.h>
-#include <fcntl.h>
 #include <fuse.h>
-#include <libgen.h>
-#include <limits.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
-#include <unistd.h>
-#include <sys/types.h>
-#include <sys/xattr.h>
-#include <string.h>
 
-#include <fuse.h>
 #include "ccfs.hpp"
 
 int ccfs_getattr(const char* path, struct stat* stbuf);
@@ -45,3 +34,5 @@ int ccfs_truncate(const char *path, off_t newsize);
 int ccfs_read(const char *path,char *buf,size_t size,off_t offset,struct fuse_file_info *fi);
 
 int ccfs_write(const char *path, const char *buf, size_t size, off_t offset,struct fuse_file_info *fi);
+
+int ccfs_link(const char *path, const char *newpath);

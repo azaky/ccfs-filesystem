@@ -235,11 +235,6 @@ int CCFS::readBlock(ptr_block position, char *buffer, int size, int offset) {
 
 /** menuliskan isi buffer ke filesystem */
 int CCFS::writeBlock(ptr_block position, const char *buffer, int size, int offset) {
-	printf("CCFS::writeBlock()\n");
-	printf("\t position = %d\n", position);
-	printf("\t size     = %d\n", size);
-	printf("\t offset   = %d\n", offset);
-	
 	/* kalau sudah di END_BLOCK, return */
 	if (position == END_BLOCK) {
 		return 0;
@@ -304,14 +299,12 @@ Entry Entry::nextEntry() {
 
 /** Mendapatkan Entry dari path */
 Entry Entry::getEntry(const char *path) {
-	printf("Entry::getEntry(%s)\n", path);
 	/* mendapatkan direktori teratas */
 	unsigned int endstr = 1;
 	while (path[endstr] != '/' && endstr < strlen(path)) {
 		endstr++;
 	}
 	string topDirectory = string(path + 1, endstr - 1);
-	printf("topDirectory = [%s]\n", topDirectory.c_str());
 	
 	/* mencari entri dengan nama topDirectory */
 	while (getName() != topDirectory && position != END_BLOCK) {
@@ -350,7 +343,6 @@ Entry Entry::getNewEntry(const char *path) {
 		endstr++;
 	}
 	string topDirectory = string(path + 1, endstr - 1);
-	printf("topDirectory = [%s]\n", topDirectory.c_str());
 	
 	/* mencari entri dengan nama topDirectory */
 	Entry entry(position, offset);
@@ -421,12 +413,6 @@ Entry Entry::getNextEmptyEntry() {
 
 /** mengosongkan entry */
 void Entry::makeEmpty() {
-	/* hapus index? */
-	/*
-	if (getIndex() != EMPTY_BLOCK && getIndex() != END_BLOCK) {
-		filesystem.freeBlock(getIndex());
-	}
-	*/
 	/* menghapus byte pertama data */
 	*(data) = 0;
 	write();
@@ -492,6 +478,44 @@ void Entry::setIndex(const ptr_block index) {
 
 void Entry::setSize(const int size) {
 	memcpy(data + 0x1C, (char*)&size, 4);
+}
+
+/** Bagian Date Time */
+time_t Entry::getDateTime() {
+	unsigned int datetime;
+	memcpy((char*)&datetime, data + 0x16, 4);
+	
+	time_t rawtime;
+	time(&rawtime);
+	struct tm *result = localtime(&rawtime);
+	
+	result->tm_sec = datetime & 0x1F;
+	result->tm_min = (datetime >> 5u) & 0x3F;
+	result->tm_hour = (datetime >> 11u) & 0x1F;
+	result->tm_mday = (datetime >> 16u) & 0x1F;
+	result->tm_mon = (datetime >> 21u) & 0xF;
+	result->tm_year = ((datetime >> 25u) & 0x7F) + 10;
+	
+	return mktime(result);
+}
+
+void Entry::setCurrentDateTime() {
+	time_t now_t;
+	time(&now_t);
+	struct tm *now = localtime(&now_t);
+	
+	int sec = now->tm_sec;
+	int min = now->tm_min;
+	int hour = now->tm_hour;
+	int day = now->tm_mday;
+	int mon = now->tm_mon;
+	int year = now->tm_year;
+	
+	int _time = (sec >> 1) | (min << 5) | (hour << 11);
+	int _date = (day) | (mon << 5) | ((year - 10) << 9);
+	
+	memcpy(data + 0x16, (char*)&_time, 2);
+	memcpy(data + 0x18, (char*)&_date, 2);
 }
 
 /** Menuliskan entry ke filesystem */

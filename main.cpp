@@ -20,9 +20,14 @@ void init_fuse() {
 	ccfs_op.truncate= ccfs_truncate;
 	ccfs_op.write	= ccfs_write;
 	ccfs_op.read	= ccfs_read;
+	ccfs_op.link	= ccfs_link;
 }
 
 int main(int argc, char** argv){
+	if (argc < 3) {
+		printf("Usage: ./ccfs <mount folder> <filesystem.ccfs> [--new]\n");
+		return 0;
+	}
 	
 	// jika terdapat argumen --new, buat baru
 	if (argc > 3 && string(argv[3]) == "--new") {
@@ -32,8 +37,8 @@ int main(int argc, char** argv){
 	filesystem.load(argv[2]);
 	
 	// inisialisasi fuse
-	int fuse_argc = 3; 
-	char* fuse_argv[3] = {argv[0], "-d", argv[1]};
+	int fuse_argc = 2; 
+	char* fuse_argv[2] = {argv[0], argv[1]};
 	
 	init_fuse();
 	

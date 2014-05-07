@@ -37,8 +37,8 @@ int ccfs_getattr(const char* path, struct stat* stbuf) {
 		// ukuran file
 		stbuf->st_size = entry.getSize();
 		
-		// waktu pembuatan file, asumsinya sama dengan waktu mounting
-		stbuf->st_mtime = filesystem.mount_time; //ganti ya ntar
+		// waktu pembuatan file
+		stbuf->st_mtime = entry.getDateTime();
 		
 		return 0;
 	}
@@ -46,16 +46,6 @@ int ccfs_getattr(const char* path, struct stat* stbuf) {
 
 /* membaca direktori: mendaftar file & direktori dalam suatu path */
 int ccfs_readdir(const char* path, void* buf, fuse_fill_dir_t filler, off_t offset, struct fuse_file_info* fi) {
-	// selain root directory, error
-	fprintf(stderr, "LAGI ccfs_readdir. PATH = %s\n", path);
-/*
-	if (string(path) != "/"){
-		return -ENOENT;
-	}
-*/	
-	// fungsi filler digunakan untuk setiap entry pada direktori tsb
-	// ditulis ke buffer "buf"
-	
 	// current & parent directory
 	filler(buf, ".", NULL, 0);
 	filler(buf, "..", NULL, 0);
@@ -63,6 +53,9 @@ int ccfs_readdir(const char* path, void* buf, fuse_fill_dir_t filler, off_t offs
 	Entry entry = Entry(0,0).getEntry(path);
 	ptr_block index = entry.getIndex();
 	entry = Entry(index,0);
+	
+	// fungsi filler digunakan untuk setiap entry pada direktori tsb
+	// ditulis ke buffer "buf"
 	while (entry.position != END_BLOCK) {
 		if(!entry.isEmpty()){
 			filler(buf, entry.getName().c_str(), NULL, 0);
@@ -98,10 +91,9 @@ int ccfs_mkdir(const char *path, mode_t mode) {
 	/* menuliskan data di entry tersebut */
 	entry.setName(path + i + 1);
 	entry.setAttr(0x0F);
-	entry.setTime(0x00);
-	entry.setDate(0x00);
+	entry.setCurrentDateTime();
 	entry.setIndex(filesystem.allocateBlock());
-	entry.setSize(0x800);
+	entry.setSize(0x00);
 
 	entry.write();
 
@@ -146,7 +138,6 @@ int ccfs_rename(const char* path, const char* newpath) {
 	Entry entryAsal = Entry(0,0).getEntry(path);
 	Entry entryLast = Entry(0,0).getNewEntry(newpath);
 	if(!entryAsal.isEmpty()){
-		printf("entry Last: [%s] (%d, %d)\n", entryLast.getName().c_str(), entryLast.position, entryLast.offset);
 		//entryLast.setName(entryAsal.getName().c_str());
 		entryLast.setAttr(entryAsal.getAttr());
 		entryLast.setIndex(entryAsal.getIndex());
@@ -180,31 +171,29 @@ int ccfs_unlink(const char *path) {
 int ccfs_mknod(const char *path, mode_t mode, dev_t dev) {
 	/* mencari parent directory */
 	int i;
-	for(i = strlen(path)-1;path[i]!='/';i--){
-		
-	}
+	for(i = strlen(path)-1;path[i]!='/';i--);
 	
 	string parentPath = string(path, i);
 	
-    Entry entry;
-    //bagi kasus kalau dia root
-    if (parentPath == "") {
+	Entry entry;
+	//bagi kasus kalau dia root
+	if (parentPath == "") {
 		entry = Entry(0, 0);
 	}
 	else {
 		entry = Entry(0,0).getEntry(parentPath.c_str());
 		ptr_block index = entry.getIndex();
 		entry = Entry(index, 0);
-    }
-    
-    /* mencari entry kosong di parent */
-    entry = entry.getNextEmptyEntry();
-    
+	}
+
+	/* mencari entry kosong di parent */
+	entry = entry.getNextEmptyEntry();
+
 	/* menuliskan data di entry tersebut */
 	entry.setName(path + i + 1);
 	entry.setAttr(0x06);
 	entry.setTime(0x00);
-	entry.setDate(0x00);
+	entry.setCurrentDateTime();
 	entry.setIndex(filesystem.allocateBlock());
 	entry.setSize(0x00);
 
@@ -257,17 +246,6 @@ int ccfs_read(const char *path,char *buf,size_t size,off_t offset,struct fuse_fi
 
 /* write buffer ke filesystem */
 int ccfs_write(const char *path,const char *buf,size_t size,off_t offset,struct fuse_file_info *fi){
-	printf("================================\n");
-	printf("=                              =\n");
-	printf("=     WRITE FILE COY!!!!!      =\n");
-	printf("=                              =\n");
-	printf("================================\n");
-	printf("\n");
-	printf("\n");
-	printf("Path   = %s\n", path);
-	printf("Size   = %d\n", size);
-	printf("Offset = %d\n", offset);
-
 	Entry entry = Entry(0,0).getEntry(path);
 	ptr_block index = entry.getIndex();
 	
@@ -281,12 +259,40 @@ int ccfs_write(const char *path,const char *buf,size_t size,off_t offset,struct 
 	
 	int result = filesystem.writeBlock(index, buf, size, offset);
 	
-	printf("Return Value = %d\n", result);
-	printf("\n");
-	printf("\n");
-	printf("\n");
-	
-	
 	return result;
 }
 
+/* copy file */
+int ccfs_link(const char *path, const char *newpath) {
+	Entry oldentry = Entry(0,0).getEntry(path);
+	
+	/* kalo nama kosong */
+	if(oldentry.isEmpty()){
+		return -ENOENT;
+	}
+	/* buat entry baru dengan nama newpath */
+	Entry newentry = Entry(0,0).getNewEntry(newpath);
+	/* set atribut untuk newpath */
+	newentry.setAttr(oldentry.getAttr());
+	newentry.setCurrentDateTime();
+	newentry.setSize(oldentry.getSize());
+	newentry.write();
+	
+	/* copy isi file */
+	char buffer[4096];
+	/* lakukan per 4096 byte */
+	int totalsize = oldentry.getSize();
+	int offset = 0;
+	while (totalsize > 0) {
+		int sizenow = totalsize;
+		if (sizenow > 4096) {
+			sizenow = 4096;
+		}
+		filesystem.readBlock(oldentry.getIndex(), buffer, oldentry.getSize(), offset);
+		filesystem.writeBlock(newentry.getIndex(), buffer, newentry.getSize(), offset);
+		totalsize -= sizenow;
+		offset += 4096;
+	}
+	
+	return 0;
+}
