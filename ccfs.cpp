@@ -212,17 +212,22 @@ int CCFS::readBlock(ptr_block position, char *buffer, int size, int offset) {
 	if (position == END_BLOCK) {
 		return 0;
 	}
+	/* kalau offset >= BLOCK_SIZE */
+	if (offset >= BLOCK_SIZE) {
+		return readBlock(nextBlock[position], buffer, size, offset - BLOCK_SIZE);
+	}
+	
 	handle.seekg(BLOCK_SIZE * DATA_POOL_OFFSET + position * BLOCK_SIZE + offset);
 	int size_now = size;
 	/* cuma bisa baca sampai sebesar block size */
-	if (size_now > BLOCK_SIZE) {
-		size_now = BLOCK_SIZE;
+	if (offset + size_now > BLOCK_SIZE) {
+		size_now = BLOCK_SIZE - offset;
 	}
 	handle.read(buffer, size_now);
 	
 	/* kalau size > block size, lanjutkan di nextBlock */
-	if (size > BLOCK_SIZE) {
-		return size_now + readBlock(nextBlock[position], buffer + BLOCK_SIZE, size - BLOCK_SIZE);
+	if (offset + size > BLOCK_SIZE) {
+		return size_now + readBlock(nextBlock[position], buffer + BLOCK_SIZE, offset + size - BLOCK_SIZE);
 	}
 	
 	return size_now;
@@ -230,24 +235,38 @@ int CCFS::readBlock(ptr_block position, char *buffer, int size, int offset) {
 
 /** menuliskan isi buffer ke filesystem */
 int CCFS::writeBlock(ptr_block position, const char *buffer, int size, int offset) {
+	printf("CCFS::writeBlock()\n");
+	printf("\t position = %d\n", position);
+	printf("\t size     = %d\n", size);
+	printf("\t offset   = %d\n", offset);
+	
 	/* kalau sudah di END_BLOCK, return */
 	if (position == END_BLOCK) {
 		return 0;
 	}
-	handle.seekp(BLOCK_SIZE * DATA_POOL_OFFSET + position * BLOCK_SIZE + offset);
-	int size_now = size;
-	if (size_now > BLOCK_SIZE) {
-		size_now = BLOCK_SIZE;
-	}
-	handle.write(buffer, size_now);
-	
-	/* kalau size > block size, lanjutkan di nextBlock */
-	if (size > BLOCK_SIZE) {
+	/* kalau offset >= BLOCK_SIZE */
+	if (offset >= BLOCK_SIZE) {
 		/* kalau nextBlock tidak ada, alokasikan */
 		if (nextBlock[position] == END_BLOCK) {
 			setNextBlock(position, allocateBlock());
 		}
-		return size_now + writeBlock(nextBlock[position], buffer + BLOCK_SIZE, size - BLOCK_SIZE);
+		return writeBlock(nextBlock[position], buffer, size, offset - BLOCK_SIZE);
+	}
+	
+	handle.seekp(BLOCK_SIZE * DATA_POOL_OFFSET + position * BLOCK_SIZE + offset);
+	int size_now = size;
+	if (offset + size_now > BLOCK_SIZE) {
+		size_now = BLOCK_SIZE - offset;
+	}
+	handle.write(buffer, size_now);
+	
+	/* kalau size > block size, lanjutkan di nextBlock */
+	if (offset + size > BLOCK_SIZE) {
+		/* kalau nextBlock tidak ada, alokasikan */
+		if (nextBlock[position] == END_BLOCK) {
+			setNextBlock(position, allocateBlock());
+		}
+		return size_now + writeBlock(nextBlock[position], buffer + BLOCK_SIZE, offset + size - BLOCK_SIZE);
 	}
 	
 	return size_now;

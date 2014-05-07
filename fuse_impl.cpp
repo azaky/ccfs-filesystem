@@ -251,12 +251,23 @@ int ccfs_read(const char *path,char *buf,size_t size,off_t offset,struct fuse_fi
 	}
 	
 	//read
-	return filesystem.readBlock(index,buf,size-offset,offset);
+	return filesystem.readBlock(index,buf,size,offset);
 	
 }
 
 /* write buffer ke filesystem */
 int ccfs_write(const char *path,const char *buf,size_t size,off_t offset,struct fuse_file_info *fi){
+	printf("================================\n");
+	printf("=                              =\n");
+	printf("=     WRITE FILE COY!!!!!      =\n");
+	printf("=                              =\n");
+	printf("================================\n");
+	printf("\n");
+	printf("\n");
+	printf("Path   = %s\n", path);
+	printf("Size   = %d\n", size);
+	printf("Offset = %d\n", offset);
+
 	Entry entry = Entry(0,0).getEntry(path);
 	ptr_block index = entry.getIndex();
 	
@@ -265,10 +276,17 @@ int ccfs_write(const char *path,const char *buf,size_t size,off_t offset,struct 
 		return -ENOENT;
 	}
 	
-	entry.setSize(size);
+	entry.setSize(offset + size);
 	entry.write();
 	
-	return filesystem.writeBlock(index,buf,size-offset,offset);
+	int result = filesystem.writeBlock(index, buf, size, offset);
 	
+	printf("Return Value = %d\n", result);
+	printf("\n");
+	printf("\n");
+	printf("\n");
+	
+	
+	return result;
 }
 
